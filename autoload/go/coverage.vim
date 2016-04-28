@@ -54,7 +54,7 @@ function! go#coverage#Buffer(bang, ...)
         return
     endif
 
-    if go#util#ShellError() != 0
+    if go#util#ShellError() == 0
         call go#coverage#overlay(l:tmpname)
     endif
 
