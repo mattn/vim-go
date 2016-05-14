@@ -105,10 +105,11 @@ After that just open the help page to see all commands:
 
     :help vim-go
 
-## Mappings
+## Example Mappings
 
 vim-go has several `<Plug>` mappings which can be used to create custom
-mappings. Below are some examples you might find useful:
+mappings. Unless otherwise specified, none of these mappings are enabled
+by default. Here some examples you might find useful:
 
 Run commands such as `go run` for the current file with `<leader>r` or `go
 build` and `go test` for the current package with `<leader>b` and `<leader>t`
@@ -255,6 +256,15 @@ saving and opening files. The following fixes this:
 let g:syntastic_go_checkers = ['golint', 'govet', 'errcheck']
 let g:syntastic_mode_map = { 'mode': 'active', 'passive_filetypes': ['go'] }
 ```
+
+Another issue with `vim-go` and `syntastic` is that the location list window
+that contains the output of commands such as `:GoBuild` and `:GoTest` might not appear.
+To resolve this:
+
+```vim
+let g:go_list_type = "quickfix"
+```
+
 
 ## More info
 
