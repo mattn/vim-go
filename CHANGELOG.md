@@ -1,13 +1,16 @@
-## 1.7 (unreleased)
+## 1.7 (June 7, 2016)
 
 FEATURES:
 
 * New **`:GoImpl`** command that generates method stubs for implementing an interface. Checkout the [demo](https://twitter.com/fatih/status/729991365581545472) to see how it works. [gh-846]
+* `godef` support is added back as an optional setting.  By default `:GoDef` still uses `guru`, but can be changed to `godef` by adding the option: `let g:go_def_mode = 'godef'` [gh-888]
 * New `<C-w><C-]>` and `<C-w>]>` shortcuts to split current window and jumpt to the identifier under cursor. [gh-838]
+* New syntax setting" `go:go_highlight_fields` that highlights struct field references [gh-854]
 
 IMPROVEMENTS:
 
 * Invoking `:GoRename` now reloads all files to reflect new changes automatically [gh-855]
+* Calling `:GoTestCompile` does not create any temporary binary file anymore [gh-879]
 * Enable passing the `-tags` flag to `:GoDef`. Now you can pass build tags to `:GoDef` via `:GoGuruTags` or `g:go_guru_tags`
 * Internal refactoring to use custom `system()` function that wraps both the standard `system()` call and `vimproc`. Now all system calls will take advantage and will use `vimproc` if installed. [gh-801]
 * Completion enables now `gocode`'s `autobuild` and `propose-builtins` flags automatically. With these settings packages will be automatically build to get the freshest completion candidates and builtin keywords will be showed as well. By defaults these settings are enabled. Settings can be disabled/enabled via `g:go_gocode_autobuild` and `g:go_gocode_propose_builtins`. [gh-815]
@@ -15,6 +18,11 @@ IMPROVEMENTS:
 * Added new `Example` and `Benchmark` snippets with `example` and `benchmark` shortcuts [gh-836]
 * Search tool binaries first in `GOBIN` and then in `PATH` as most of vim-go users installs it to `GOBIN` mostly [gh-823]
 * Improve `guru` based commands by providing automatically detected GOPATHS, such as `gb`, `godep` to be used if possible [gh-861]
+* Add `<Plug>(go-imports)` mapping to make it assignable to other keys [gh-878]
+* Increase compatibility with tcsh [gh-869]
+* Improve `:GoInstallBinaries` for GOPATH's which don't have packages that work well with `go get -u`. We have a new `g:go_get_update` setting to disable it. By default it's enabled. [gh-883]
+
+
 
 BUG FIXES:
 * Fix `(go-freevars)` plug mapping to work as in visual mode instead of noncompatible normal mode [gh-832]
@@ -26,6 +34,7 @@ BUG FIXES:
 * Fix `:GoPlay` posting to non HTTPS url. [gh-847]
 * Fix escaping the filenames for lint and motion commands [gh-862]
 * Fix escaping the filename to `:GoDef` completely for tcsh [gh-868]
+* Fix showing SUCCESS for `go test` related commands if no test files are available [gh-859]
 
 
 
