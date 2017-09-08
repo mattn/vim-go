@@ -1,5 +1,13 @@
-if !executable('dlv')
-  finish
+if !exists('g:go_debug_windows')
+  let g:go_debug_windows = {
+        \ 'stack': 'leftabove 20vnew',
+        \ 'out':   'botright 10new',
+        \ 'vars':  'leftabove 30vnew',
+        \ }
+endif
+
+if !exists('g:go_debug_address')
+  let g:go_debug_address = '127.0.0.1:8181'
 endif
 
 if !exists('s:state')
@@ -12,8 +20,6 @@ if !exists('s:state')
   \ 'message': [],
   \}
 endif
-
-let s:addr = '127.0.0.1:8181'
 
 function! s:groutineID() abort
   return s:state['currentThread'].goroutineID
@@ -123,7 +129,7 @@ function! s:show_stacktrace(res) abort
   silent %delete _
   for i in range(len(a:res.result.Locations))
     let loc = a:res.result.Locations[i]
-    call setline(i+1, printf('%s - %s:%d', loc.function.name, fnamemodify(loc.file, ':p'), loc.line))
+    call setline(i+1, printf('%s - %s:%d', loc.function.name, fnamemodify(loc.file, ':.p'), loc.line))
   endfor
   setlocal nomodifiable
   wincmd p
@@ -276,26 +282,32 @@ function! s:start_cb(ch, json) abort
     return
   endif
 
-  silent leftabove 20vnew
-  silent file `='__GODEBUG_STACKTRACE__'`
-  setlocal buftype=nofile bufhidden=wipe nomodified nobuflisted noswapfile nowrap nonumber nocursorline
-  setlocal filetype=godebugstacktrace
-  nmap <buffer> <cr> :<c-u>call <SID>goto_file()<cr>
-  nmap <buffer> q <Plug>(go-debug-stop)
+  if exists('g:go_debug_windows["stack"]') && g:go_debug_windows['stack'] != ''
+    exe 'silent ' . g:go_debug_windows['stack']
+    silent file `='__GODEBUG_STACKTRACE__'`
+    setlocal buftype=nofile bufhidden=wipe nomodified nobuflisted noswapfile nowrap nonumber nocursorline
+    setlocal filetype=godebugstacktrace
+    nmap <buffer> <cr> :<c-u>call <SID>goto_file()<cr>
+    nmap <buffer> q <Plug>(go-debug-stop)
+  endif
 
-  silent botright 10new
-  silent file `='__GODEBUG_OUTPUT__'`
-  setlocal buftype=nofile bufhidden=wipe nomodified nobuflisted noswapfile nowrap nonumber nocursorline
-  setlocal filetype=godebugoutput
-  nmap <buffer> q <Plug>(go-debug-stop)
+  if exists('g:go_debug_windows["out"]') && g:go_debug_windows['out'] != ''
+    exe 'silent ' . g:go_debug_windows['out']
+    silent file `='__GODEBUG_OUTPUT__'`
+    setlocal buftype=nofile bufhidden=wipe nomodified nobuflisted noswapfile nowrap nonumber nocursorline
+    setlocal filetype=godebugoutput
+    nmap <buffer> q <Plug>(go-debug-stop)
+  endif
 
-  silent leftabove 30vnew
-  silent file `='__GODEBUG_VARIABLES__'`
-  setlocal buftype=nofile bufhidden=wipe nomodified nobuflisted noswapfile nowrap nonumber nocursorline
-  setlocal filetype=godebugvariables
-  call append(0, ["# Local Variables", "", "# Function Arguments"])
-  nmap <buffer> <cr> :<c-u>call <SID>expand_var()<cr>
-  nmap <buffer> q <Plug>(go-debug-stop)
+  if exists('g:go_debug_windows["vars"]') && g:go_debug_windows['vars'] != ''
+    exe 'silent ' . g:go_debug_windows['vars']
+    silent file `='__GODEBUG_VARIABLES__'`
+    setlocal buftype=nofile bufhidden=wipe nomodified nobuflisted noswapfile nowrap nonumber nocursorline
+    setlocal filetype=godebugvariables
+    call append(0, ["# Local Variables", "", "# Function Arguments"])
+    nmap <buffer> <cr> :<c-u>call <SID>expand_var()<cr>
+    nmap <buffer> q <Plug>(go-debug-stop)
+  endif
 
   command! -nargs=0 GoDebugDiag call go#debug#Diag()
   command! -nargs=0 GoDebugToggleBreakpoint call go#debug#ToggleBreakpoint()
@@ -341,7 +353,7 @@ endfunction
 function! s:starting(ch, msg) abort
   echomsg a:msg
   let s:state['message'] += [a:msg]
-  if stridx(a:msg, s:addr) != -1
+  if stridx(a:msg, g:go_debug_address) != -1
     call ch_setoptions(a:ch, {
     \ 'out_cb': function('s:logger', ['OUT: ']),
     \ 'err_cb': function('s:logger', ['ERR: ']),
@@ -363,7 +375,7 @@ function! go#debug#Start(...) abort
   try
     echohl SpecialKey | echomsg 'Starting GoDebug...' | echohl None
     let s:state['message'] = []
-    let job = job_start(dlv . ' debug --headless --api-version=2 --log --listen=' . s:addr . ' --accept-multiclient -- ' . join(a:000, ' '), {
+    let job = job_start(dlv . ' debug --headless --api-version=2 --log --listen=' . g:go_debug_address . ' --accept-multiclient -- ' . join(a:000, ' '), {
     \ 'out_cb': function('s:starting'),
     \ 'err_cb': function('s:starting'),
     \ 'exit_cb': function('s:exit'),
@@ -481,7 +493,8 @@ function! s:stack_cb(ch, json) abort
   let s:stack_name = ''
   let res = json_decode(a:json)
   if type(res) == v:t_dict && has_key(res, 'error') && !empty(res.error)
-    throw res.error
+    echohl Error | res.error | echohl None
+    return
   endif
   if empty(res) || !has_key(res, 'result')
     return
@@ -551,7 +564,17 @@ function! go#debug#ToggleBreakpoint() abort
   endtry
 endfunction
 
-hi GoDebugBreakpoint term=standout ctermbg=8 guibg=#BAD4F5
-hi GoDebugCurrent term=reverse ctermbg=12 guibg=DarkBlue
 sign define godebugbreakpoint text=> texthl=GoDebugBreakpoint
 sign define godebugcurline text== linehl=GoDebugCurrent texthl=GoDebugCurrent
+
+fun! s:hi()
+  hi GoDebugBreakpoint term=standout ctermbg=8  ctermfg=0 guibg=#BAD4F5  guifg=Black
+  hi GoDebugCurrent    term=reverse  ctermbg=12 ctermfg=7 guibg=DarkBlue guifg=White
+endfun
+augroup vim-go-breakpoint
+  autocmd!
+  autocmd ColorScheme * call s:hi()
+augroup end
+call s:hi()
+
+" vim: sw=2 ts=2 et
