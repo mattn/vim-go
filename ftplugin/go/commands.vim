@@ -107,6 +107,7 @@ command! -nargs=0 GoKeyify call go#keyify#Keyify()
 " -- debug
 if !exists(':GoDebugStart')
   command! -nargs=* GoDebugStart call go#debug#Start(<f-args>)
+  command! -nargs=* GoDebugStartWith call go#debug#StartWith(<f-args>)
 endif
 
 
