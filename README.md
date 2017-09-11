@@ -10,7 +10,9 @@ This plugin adds Go language support for Vim, with the following main features:
 
 * Build with `:GoBuild`, install with `:GoInstall` or test
   with `:GoTest` (run single tests via `:GoTestFunc`)
-* Show test coverage with `:GoCoverage` or in browser with `:GoCoverageBrowser` 
+* Debug programs with integrated [`delve`](https://github.com/derekparker/delve)
+  support with `:GoDebugStart`.
+* Show test coverage with `:GoCoverage` or in browser with `:GoCoverageBrowser`
 * Goto definition with `:GoDef`
 * Quick jump to declarations with `:GoDecls` or `:GoDeclsDir`
 * Show documentation with `:GoDoc` inside or in browser with `:GoDocBrowser`
