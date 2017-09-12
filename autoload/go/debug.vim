@@ -1,8 +1,8 @@
 if !exists('g:go_debug_windows')
   let g:go_debug_windows = {
-        \ 'stack': 'leftabove 20vnew',
-        \ 'out':   'botright 10new',
-        \ 'vars':  'leftabove 30vnew',
+        \ 'stack':  'leftabove 20vnew',
+        \ 'output': 'botright 10new',
+        \ 'vars':   'leftabove 30vnew',
         \ }
 endif
 
@@ -17,8 +17,13 @@ if !exists('s:state')
   \ 'currentThread': {},
   \ 'localVars': {},
   \ 'functionArgs': {},
+  \ 'stacktrace': [],
   \ 'message': [],
   \}
+endif
+
+if !exists('s:log_messages')
+  let s:log_messages = []
 endif
 
 function! s:groutineID() abort
@@ -37,6 +42,17 @@ function! s:exit(job, status) abort
 endfunction
 
 function! s:logger(prefix, ch, msg) abort
+  " Always remember the last 100 log messages.
+  let s:log_messages = add(s:log_messages, [a:prefix, a:msg])[:100]
+
+  call s:append_log_window(a:prefix, a:msg)
+endfunction
+
+function! go#debug#Messages() abort
+  return s:log_messages
+endfunction
+
+function! s:append_log_window(prefix, msg) abort
   let winnum = bufwinnr(bufnr('__GODEBUG_OUTPUT__'))
   if winnum == -1
     return
@@ -117,10 +133,7 @@ function! s:update_breakpoint(res) abort
   silent! exe 'sign place 9999 line=' . linenr . ' name=godebugcurline file=' . filename
 endfunction
 
-function! s:show_stacktrace(res) abort
-  if !has_key(a:res, 'result')
-    return
-  endif
+function! s:populate_trace_window(trace) abort
   let winnum = bufwinnr(bufnr('__GODEBUG_STACKTRACE__'))
   if winnum == -1
     return
@@ -128,8 +141,8 @@ function! s:show_stacktrace(res) abort
   exe winnum 'wincmd w'
   setlocal modifiable
   silent %delete _
-  for i in range(len(a:res.result.Locations))
-    let loc = a:res.result.Locations[i]
+  for i in range(len(a:trace))
+    let loc = a:trace[i]
     call setline(i+1, printf('%s - %s:%d', loc.function.name, fnamemodify(loc.file, ':.p'), loc.line))
   endfor
   setlocal nomodifiable
@@ -272,6 +285,39 @@ function! s:expand_var() abort
   endif
 endfunction
 
+" Convert the current window to a "special" debug mode window.
+function! go#debug#Window(which) abort
+  if index(['stack', 'output', 'vars'], a:which) == -1
+    echoerr 'Unknown window type: ' . a:which . '; valid values are "stack", "output", and "vars".'
+    return
+  endif
+
+  setlocal buftype=nofile bufhidden=wipe nomodified nobuflisted noswapfile nowrap nonumber nocursorline
+  nmap <buffer> q <Plug>(go-debug-stop)
+
+  if a:which == 'stack'
+    silent file `='__GODEBUG_STACKTRACE__'`
+    setlocal filetype=godebugstacktrace
+
+    call s:populate_trace_window(s:state['stacktrace'])
+    nmap <buffer> <cr> :<c-u>call <SID>goto_file()<cr>
+  elseif a:which == 'output'
+    silent file `='__GODEBUG_OUTPUT__'`
+    setlocal filetype=godebugoutput
+
+    exe 'normal! ggd' . line('$') . "\<CR>"
+    for msg in s:log_messages
+      call s:append_log_window(msg[0], msg[1])
+    endfor
+  elseif a:which == 'vars'
+    silent file `='__GODEBUG_VARIABLES__'`
+    setlocal filetype=godebugvariables
+
+    call append(0, ["# Local Variables", "", "# Function Arguments"])
+    nmap <buffer> <cr> :<c-u>call <SID>expand_var()<cr>
+  endif
+endfunction
+
 function! s:start_cb(ch, json) abort
   let res = json_decode(a:json)
   if type(res) == v:t_dict && has_key(res, 'error') && !empty(res.error)
@@ -297,29 +343,17 @@ function! s:start_cb(ch, json) abort
 
   if exists('g:go_debug_windows["stack"]') && g:go_debug_windows['stack'] != ''
     exe 'silent ' . g:go_debug_windows['stack']
-    silent file `='__GODEBUG_STACKTRACE__'`
-    setlocal buftype=nofile bufhidden=wipe nomodified nobuflisted noswapfile nowrap nonumber nocursorline
-    setlocal filetype=godebugstacktrace
-    nmap <buffer> <cr> :<c-u>call <SID>goto_file()<cr>
-    nmap <buffer> q <Plug>(go-debug-stop)
+    call go#debug#Window('stack')
   endif
 
-  if exists('g:go_debug_windows["out"]') && g:go_debug_windows['out'] != ''
-    exe 'silent ' . g:go_debug_windows['out']
-    silent file `='__GODEBUG_OUTPUT__'`
-    setlocal buftype=nofile bufhidden=wipe nomodified nobuflisted noswapfile nowrap nonumber nocursorline
-    setlocal filetype=godebugoutput
-    nmap <buffer> q <Plug>(go-debug-stop)
+  if exists('g:go_debug_windows["output"]') && g:go_debug_windows['output'] != ''
+    exe 'silent ' . g:go_debug_windows['output']
+    call go#debug#Window('output')
   endif
 
   if exists('g:go_debug_windows["vars"]') && g:go_debug_windows['vars'] != ''
     exe 'silent ' . g:go_debug_windows['vars']
-    silent file `='__GODEBUG_VARIABLES__'`
-    setlocal buftype=nofile bufhidden=wipe nomodified nobuflisted noswapfile nowrap nonumber nocursorline
-    setlocal filetype=godebugvariables
-    call append(0, ["# Local Variables", "", "# Function Arguments"])
-    nmap <buffer> <cr> :<c-u>call <SID>expand_var()<cr>
-    nmap <buffer> q <Plug>(go-debug-stop)
+    call go#debug#Window('vars')
   endif
 
   command! -nargs=0 GoDebugDiag call go#debug#Diag()
@@ -334,6 +368,8 @@ function! s:start_cb(ch, json) abort
   command! -nargs=* GoDebugSet call go#debug#Set(<f-args>)
   command! -nargs=1 GoDebugEval call go#debug#Eval(<q-args>)
   command! -nargs=* GoDebugCommand call go#debug#Command(<f-args>)
+  command! -nargs=1 GoDebugWindow call go#debug#Window(<f-args>)
+  command! -nargs=0 GoDebugMessages for m in s:log_messages | echo m[0] . m[1] | endfor
 
   nnoremap <silent> <Plug>(go-debug-diag) :<C-u>call go#debug#Diag()<CR>
   nnoremap <silent> <Plug>(go-debug-toggle-breakpoint) :<C-u>call go#debug#ToggleBreakpoint()<CR>
@@ -508,7 +544,11 @@ endfunction
 function! s:update_stacktrace() abort
   try
     let res = s:call_jsonrpc('RPCServer.Stacktrace', {'id': s:groutineID(), 'depth': 5})
-    call s:show_stacktrace(res)
+    if !has_key(res, 'result')
+      return
+    endif
+    let s:state['stacktrace'] = res.result.Locations
+    call s:populate_trace_window(s:state['stacktrace'])
   catch
     echohl Error | echomsg v:exception | echohl None
   endtry
